@@ -52,6 +52,23 @@ struct cli_state {
 
 static void cli_disconnect(struct cli_state *state);
 
+struct cli_line_state {
+  pthread_mutex_t lock;
+  int active;
+  const char *prompt;
+  char buf[2048];
+  size_t len;
+  size_t cursor;
+};
+
+static struct cli_line_state g_line = {
+    PTHREAD_MUTEX_INITIALIZER, 0, NULL, {0}, 0, 0};
+
+static void cli_redraw_line_locked(void);
+static void cli_async_begin(void);
+static void cli_async_end(void);
+static void cli_line_finish(int print_newline);
+
 static const char *cli_prompt(void) {
   return "cynk-device> ";
 }
@@ -88,8 +105,10 @@ static const char *cli_reset(void) {
 }
 
 static void cli_print_prompt(void) {
+  pthread_mutex_lock(&g_line.lock);
   printf("%s%s%s", cli_color(CYNK_CLR_CYAN), cli_prompt(), cli_reset());
   fflush(stdout);
+  pthread_mutex_unlock(&g_line.lock);
 }
 
 struct cli_history {
@@ -239,17 +258,44 @@ static void cli_history_free(struct cli_history *hist) {
   memset(hist, 0, sizeof(*hist));
 }
 
-static void cli_redraw_line(const char *prompt, const char *buf, size_t len,
-                            size_t cursor) {
+static void cli_line_store_locked(const char *prompt, const char *buf, size_t len,
+                                  size_t cursor) {
+  size_t n = len;
+
+  if (n >= sizeof(g_line.buf)) {
+    n = sizeof(g_line.buf) - 1;
+  }
+
+  if (n > 0) {
+    memcpy(g_line.buf, buf, n);
+  }
+  g_line.buf[n] = '\0';
+  g_line.len = n;
+  g_line.cursor = cursor > n ? n : cursor;
+  g_line.prompt = prompt;
+}
+
+static void cli_redraw_line_locked(void) {
+  const char *prompt = g_line.prompt ? g_line.prompt : "";
+
   printf("\r%s", prompt);
-  if (len > 0) {
-    fwrite(buf, 1, len, stdout);
+  if (g_line.len > 0) {
+    fwrite(g_line.buf, 1, g_line.len, stdout);
   }
   fputs("\x1b[K", stdout);
-  if (len > cursor) {
-    printf("\x1b[%zuD", len - cursor);
+  if (g_line.len > g_line.cursor) {
+    printf("\x1b[%zuD", g_line.len - g_line.cursor);
   }
   fflush(stdout);
+}
+
+static void cli_redraw_line(const char *prompt, const char *buf, size_t len,
+                            size_t cursor) {
+  pthread_mutex_lock(&g_line.lock);
+  g_line.active = 1;
+  cli_line_store_locked(prompt, buf, len, cursor);
+  cli_redraw_line_locked();
+  pthread_mutex_unlock(&g_line.lock);
 }
 
 static void cli_print_suggestions(const char **items, size_t count) {
@@ -259,10 +305,55 @@ static void cli_print_suggestions(const char **items, size_t count) {
     return;
   }
 
+  pthread_mutex_lock(&g_line.lock);
   fputs("\n", stdout);
   for (i = 0; i < count; i++) {
     printf("%s%s", items[i], (i + 1) % 4 == 0 || i + 1 == count ? "\n" : "\t");
   }
+  fflush(stdout);
+  pthread_mutex_unlock(&g_line.lock);
+}
+
+static void cli_line_start(const char *prompt) {
+  pthread_mutex_lock(&g_line.lock);
+  g_line.active = 1;
+  g_line.prompt = prompt;
+  g_line.len = 0;
+  g_line.cursor = 0;
+  g_line.buf[0] = '\0';
+  fputs(prompt, stdout);
+  fflush(stdout);
+  pthread_mutex_unlock(&g_line.lock);
+}
+
+static void cli_line_finish(int print_newline) {
+  pthread_mutex_lock(&g_line.lock);
+  if (print_newline) {
+    fputs("\n", stdout);
+  }
+  g_line.active = 0;
+  g_line.prompt = NULL;
+  g_line.len = 0;
+  g_line.cursor = 0;
+  g_line.buf[0] = '\0';
+  fflush(stdout);
+  pthread_mutex_unlock(&g_line.lock);
+}
+
+static void cli_async_begin(void) {
+  pthread_mutex_lock(&g_line.lock);
+  if (g_line.active) {
+    fputs("\r\x1b[K", stdout);
+  }
+}
+
+static void cli_async_end(void) {
+  if (g_line.active) {
+    cli_redraw_line_locked();
+  } else {
+    fflush(stdout);
+  }
+  pthread_mutex_unlock(&g_line.lock);
 }
 
 static void cli_tab_complete(char *buf, size_t buflen, size_t *len, size_t *cursor) {
@@ -394,7 +485,6 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
   raw = orig;
   raw.c_lflag &= (tcflag_t) ~(ICANON | ECHO);
   raw.c_iflag &= (tcflag_t) ~(IXON | ICRNL);
-  raw.c_oflag &= (tcflag_t) ~(OPOST);
   raw.c_cc[VMIN] = 1;
   raw.c_cc[VTIME] = 0;
 
@@ -402,8 +492,7 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
     return NULL;
   }
 
-  fputs(prompt, stdout);
-  fflush(stdout);
+  cli_line_start(prompt);
 
   for (;;) {
     unsigned char c;
@@ -412,12 +501,13 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
     if (n <= 0) {
       tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
       free(saved);
+      cli_line_finish(0);
       return NULL;
     }
 
     if (c == '\r' || c == '\n') {
       buf[len] = '\0';
-      fputs("\n", stdout);
+      cli_line_finish(1);
       tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
       free(saved);
       return buf;
@@ -430,7 +520,7 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
 
     if (c == 3) {
       buf[0] = '\0';
-      fputs("\n", stdout);
+      cli_line_finish(1);
       tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
       free(saved);
       return buf;
@@ -440,6 +530,7 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
       if (len == 0) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
         free(saved);
+        cli_line_finish(0);
         return NULL;
       }
       continue;
@@ -534,8 +625,7 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
           buf[len++] = (char)c;
           cursor = len;
           buf[len] = '\0';
-          fwrite(&c, 1, 1, stdout);
-          fflush(stdout);
+          cli_redraw_line(prompt, buf, len, cursor);
         }
       }
     }
@@ -722,24 +812,27 @@ static void cli_on_handshake(void *ctx, const char *user_id) {
 
   snprintf(telemetry, sizeof(telemetry), "cynk/v1/%s/%s/telemetry", user_id,
            state->cfg.device_id);
-  printf("\n%sHandshake complete.%s\n", cli_color(CYNK_CLR_GREEN), cli_reset());
+  cli_async_begin();
+  printf("%sHandshake complete.%s\n", cli_color(CYNK_CLR_GREEN), cli_reset());
   printf("User ID: %s%s%s\n", cli_color(CYNK_CLR_MAGENTA), user_id, cli_reset());
   printf("Telemetry topic: %s%s%s\n", cli_color(CYNK_CLR_DIM), telemetry,
          cli_reset());
-  cli_print_prompt();
+  cli_async_end();
 }
 
 static void cli_on_command(void *ctx, const cynk_command *cmd) {
   struct cli_state *state = ctx;
 
   if (state->profile == PROFILE_SENSOR) {
-    printf("\n%sCommand received, but current profile is sensor (ignoring).%s\n",
+    cli_async_begin();
+    printf("%sCommand received, but current profile is sensor (ignoring).%s\n",
            cli_color(CYNK_CLR_YELLOW), cli_reset());
-    cli_print_prompt();
+    cli_async_end();
     return;
   }
 
-  printf("\nCommand: %s%s%s\n", cli_color(CYNK_CLR_BLUE),
+  cli_async_begin();
+  printf("Command: %s%s%s\n", cli_color(CYNK_CLR_BLUE),
          cmd->command ? cmd->command : "(null)", cli_reset());
   if (cmd->request_id) {
     printf("Request ID: %s%s%s\n", cli_color(CYNK_CLR_MAGENTA),
@@ -759,7 +852,7 @@ static void cli_on_command(void *ctx, const cynk_command *cmd) {
     printf("Params: %s%s%s\n", cli_color(CYNK_CLR_DIM), cmd->params_json,
            cli_reset());
   }
-  cli_print_prompt();
+  cli_async_end();
 }
 
 static void cli_publish_callback(void **state_ptr,
@@ -800,17 +893,19 @@ static void *cli_mqtt_worker(void *arg) {
     if (state->device) {
       int rc = cynk_device_poll(state->device);
       if (rc == CYNK_ERR_TIMEOUT) {
-        fprintf(stderr, "\n%sHandshake timeout.%s\n", cli_color(CYNK_CLR_YELLOW),
+        cli_async_begin();
+        fprintf(stderr, "%sHandshake timeout.%s\n", cli_color(CYNK_CLR_YELLOW),
                 cli_reset());
-        cli_print_prompt();
+        cli_async_end();
       }
     }
     if (state->mqtt.error != MQTT_OK) {
-      fprintf(stderr, "\n%sMQTT error:%s %s\n", cli_color(CYNK_CLR_RED),
+      cli_async_begin();
+      fprintf(stderr, "%sMQTT error:%s %s\n", cli_color(CYNK_CLR_RED),
               cli_reset(), mqtt_error_str(state->mqtt.error));
       state->worker_running = 0;
       state->connected = 0;
-      cli_print_prompt();
+      cli_async_end();
       break;
     }
     usleep(100000U);
