@@ -11,14 +11,13 @@ cmake --build build
 
 ## Run
 
-TLS is on by default (port 8883). Provide a CA or use `--tls-insecure` for local tests.
+TLS is on by default (port 8883). A dev CA is bundled at `certs/dev_ca.crt`.
 
 ```bash
 ./build/cynk-device \
   --device-id <device_id> \
   --password <device_password> \
-  --broker localhost \
-  --tls-ca /path/to/ca.crt
+  --broker localhost
 ```
 
 Plain TCP:
@@ -68,8 +67,10 @@ printf "connect\nsend <slug> 42\nquit\n" | \
 - Command history is available with ↑/↓ and saved to `~/.cynk-device_history` (override with `CYNK_DEVICE_HISTORY`).
 - Press Tab for command suggestions (commands, profiles, `send` options).
 - Colors are on by default; set `CYNK_DEVICE_NO_COLOR=1` to disable.
+- A dev CA is bundled at `certs/dev_ca.crt` so TLS works out of the box for local brokers.
 
 ## Troubleshooting
 
 - Handshake timeout: ensure the backend consumer is running and subscribed to `cynk/v1/status/+`.
 - TLS CA missing: for the dev broker, regenerate `priv/dev_tls/ca.crt` with `./scripts/gen_dev_mqtt_certs.sh` in the main Cynk repo, or use `--tls-insecure` for local tests.
+- TLS CA path errors: run the CLI from the repo root (so `certs/dev_ca.crt` resolves) or pass `--tls-ca /path/to/ca.crt`.

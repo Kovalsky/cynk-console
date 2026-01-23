@@ -11,7 +11,7 @@ static void print_usage(const char *prog) {
   puts("  --broker <host>            MQTT broker host (default: localhost)");
   puts("  --port <port>              MQTT broker port (default: 8883 for TLS, 1883 for no TLS)");
   puts("  --no-tls                   disable TLS");
-  puts("  --tls-ca <path>            CA cert path for TLS");
+  puts("  --tls-ca <path>            CA cert path for TLS (default: certs/dev_ca.crt)");
   puts("  --tls-insecure             skip TLS verification");
   puts("  --qos <0|1|2>              publish QoS (default: 1)");
   puts("  --keepalive <seconds>      MQTT keepalive (default: 30)");
@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
   cfg.keepalive = 30;
   cfg.handshake_timeout_ms = 10000;
   cfg.tls = 1;
+  cfg.tls_ca = "certs/dev_ca.crt";
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--device-id") == 0 && i + 1 < argc) {
