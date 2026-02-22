@@ -94,7 +94,21 @@ const char *compat_home_dir(void) {
 }
 
 const char *compat_default_ca_path(void) {
-  return "/etc/ssl/certs/ca-certificates.crt";
+  static const char *paths[] = {
+      "/etc/ssl/cert.pem",                   /* macOS, Alpine */
+      "/etc/ssl/certs/ca-certificates.crt",  /* Debian, Ubuntu */
+      "/etc/pki/tls/certs/ca-bundle.crt",    /* RHEL, CentOS, Fedora */
+      "/etc/ssl/ca-bundle.pem",              /* SUSE */
+  };
+  size_t i;
+
+  for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+    if (access(paths[i], R_OK) == 0) {
+      return paths[i];
+    }
+  }
+
+  return NULL;
 }
 
 /* ------------------------------------------------------------------ */

@@ -13,7 +13,7 @@ static void print_usage(const char *prog) {
   puts("  --broker <host>            MQTT broker host (default: staging.cynk.tech)");
   puts("  --port <port>              MQTT broker port (default: 8883 for TLS, 1883 for no TLS)");
   puts("  --no-tls                   disable TLS");
-  puts("  --tls-ca <path>            CA cert path for TLS (default: /etc/ssl/certs/ca-certificates.crt)");
+  puts("  --tls-ca <path>            CA cert path (auto-detected from system)");
   puts("  --tls-insecure             skip TLS verification");
   puts("  --qos <0|1|2>              publish QoS (default: 1)");
   puts("  --keepalive <seconds>      MQTT keepalive (default: 30)");
@@ -113,11 +113,6 @@ int main(int argc, char **argv) {
 
   if (cfg.handshake_timeout_ms <= 0) {
     fprintf(stderr, "handshake timeout must be positive\n");
-    return 1;
-  }
-
-  if (cfg.tls && !cfg.tls_ca && !cfg.tls_insecure) {
-    fprintf(stderr, "TLS enabled but no CA provided. Use --tls-ca or --tls-insecure.\n");
     return 1;
   }
 

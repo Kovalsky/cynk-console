@@ -77,7 +77,7 @@ target_link_libraries(cynk-console
 
 # ---------- Platform-specific link dependencies ----------
 if(WIN32)
-  target_link_libraries(cynk-console PRIVATE ws2_32)
+  target_link_libraries(cynk-console PRIVATE ws2_32 crypt32)
 else()
   find_package(Threads REQUIRED)
   target_link_libraries(cynk-console PRIVATE Threads::Threads)

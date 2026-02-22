@@ -8,6 +8,10 @@
 
 #include <mbedtls/error.h>
 
+#ifdef _WIN32
+#include <wincrypt.h>
+#endif
+
 static void set_error(char *err, size_t cap, const char *fmt, ...) {
   va_list args;
   if (!err || cap == 0) {
@@ -23,6 +27,36 @@ static void set_mbedtls_error(char *err, size_t cap, const char *prefix, int cod
   mbedtls_strerror(code, buf, sizeof(buf));
   set_error(err, cap, "%s: %s", prefix, buf);
 }
+
+#ifdef _WIN32
+static int load_windows_certs(mbedtls_x509_crt *chain, char *err, size_t err_cap) {
+  HCERTSTORE store;
+  PCCERT_CONTEXT ctx = NULL;
+  int loaded = 0;
+
+  store = CertOpenSystemStoreA(0, "ROOT");
+  if (!store) {
+    set_error(err, err_cap, "CertOpenSystemStore failed");
+    return -1;
+  }
+
+  while ((ctx = CertEnumCertificatesInStore(store, ctx)) != NULL) {
+    if (mbedtls_x509_crt_parse_der(chain, ctx->pbCertEncoded,
+                                    ctx->cbCertEncoded) == 0) {
+      loaded++;
+    }
+  }
+
+  CertCloseStore(store, 0);
+
+  if (loaded == 0) {
+    set_error(err, err_cap, "no certificates found in Windows store");
+    return -1;
+  }
+
+  return 0;
+}
+#endif
 
 static void init_tls(cynk_mqtt_socket *sock) {
   mbedtls_ssl_init(&sock->ssl);
@@ -57,11 +91,6 @@ int cynk_net_connect(cynk_mqtt_socket **out, const cynk_net_config *cfg,
 
     init_tls(sock);
 
-    if (!cfg->tls_insecure && !cfg->ca_path) {
-      set_error(err, err_cap, "TLS enabled but no CA provided");
-      goto fail;
-    }
-
     ret = mbedtls_ctr_drbg_seed(&sock->ctr_drbg, mbedtls_entropy_func, &sock->entropy,
                                 (const unsigned char *)pers, strlen(pers));
     if (ret != 0) {
@@ -70,10 +99,22 @@ int cynk_net_connect(cynk_mqtt_socket **out, const cynk_net_config *cfg,
     }
 
     if (!cfg->tls_insecure) {
-      ret = mbedtls_x509_crt_parse_file(&sock->ca, cfg->ca_path);
-      if (ret < 0) {
-        set_mbedtls_error(err, err_cap, "mbedtls_x509_crt_parse_file failed", ret);
+      if (cfg->ca_path) {
+        ret = mbedtls_x509_crt_parse_file(&sock->ca, cfg->ca_path);
+        if (ret < 0) {
+          set_mbedtls_error(err, err_cap, "mbedtls_x509_crt_parse_file failed", ret);
+          goto fail;
+        }
+      } else {
+#ifdef _WIN32
+        if (load_windows_certs(&sock->ca, err, err_cap) != 0) {
+          goto fail;
+        }
+#else
+        set_error(err, err_cap,
+                  "no CA certificate found. Use --tls-ca or --tls-insecure");
         goto fail;
+#endif
       }
     }
 
