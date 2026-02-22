@@ -16,15 +16,19 @@ jobs:
           - os: ubuntu-latest
             artifact: cynk-console-linux-x86_64
             binary: cynk-console
+            cmake_flags: ""
           - os: macos-latest          # ARM64 (Apple Silicon)
             artifact: cynk-console-macos-arm64
             binary: cynk-console
-          - os: macos-13              # x86_64 (Intel)
+            cmake_flags: ""
+          - os: macos-latest          # cross-compile x86_64 from ARM64
             artifact: cynk-console-macos-x86_64
             binary: cynk-console
+            cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=x86_64"
           - os: windows-latest
             artifact: cynk-console-windows-x86_64
             binary: cynk-console.exe
+            cmake_flags: ""
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.artifact }})
@@ -37,11 +41,11 @@ jobs:
 
       - name: Configure (Unix)
         if: runner.os != 'Windows'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
 
       - name: Configure (Windows)
         if: runner.os == 'Windows'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
 
       - name: Build
         run: cmake --build build --config Release
