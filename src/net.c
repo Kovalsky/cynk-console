@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdint.h>
 
+#include "compat.h"
+
 #include <mbedtls/error.h>
 
 #ifdef _WIN32
