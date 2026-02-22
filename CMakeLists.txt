@@ -26,6 +26,13 @@ set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
 add_subdirectory(third_party/mbedtls)
 add_subdirectory(${CYNK_DEVICE_SDK_DIR} cynk_device_sdk)
 
+# ---------- Platform-specific compat source ----------
+if(WIN32)
+  set(COMPAT_SRC src/compat_win32.c)
+else()
+  set(COMPAT_SRC src/compat_posix.c)
+endif()
+
 add_library(mqttc STATIC
   third_party/mqtt-c/src/mqtt.c
   src/mqtt_pal.c
@@ -51,6 +58,7 @@ add_executable(cynk-console
   src/main.c
   src/cli.c
   src/net.c
+  ${COMPAT_SRC}
 )
 
 target_include_directories(cynk-console
@@ -67,6 +75,10 @@ target_link_libraries(cynk-console
     mbedcrypto
 )
 
-find_package(Threads REQUIRED)
-
-target_link_libraries(cynk-console PRIVATE Threads::Threads)
+# ---------- Platform-specific link dependencies ----------
+if(WIN32)
+  target_link_libraries(cynk-console PRIVATE ws2_32)
+else()
+  find_package(Threads REQUIRED)
+  target_link_libraries(cynk-console PRIVATE Threads::Threads)
+endif()

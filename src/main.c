@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "compat.h"
+
 static void print_usage(const char *prog) {
   printf("Usage: %s --device-id <id> --password <password> [options]\n", prog);
   puts("");
@@ -40,7 +42,7 @@ int main(int argc, char **argv) {
   cfg.keepalive = 30;
   cfg.handshake_timeout_ms = 10000;
   cfg.tls = 1;
-  cfg.tls_ca = "/etc/ssl/certs/ca-certificates.crt";
+  cfg.tls_ca = compat_default_ca_path();
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--device-id") == 0 && i + 1 < argc) {

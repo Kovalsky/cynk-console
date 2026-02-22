@@ -1,8 +1,6 @@
 #include <mqtt.h>
 
-#include <errno.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "compat.h"
 
 #include <mbedtls/ssl.h>
 
@@ -13,9 +11,10 @@ static ssize_t mqtt_pal_sendall_plain(cynk_mqtt_socket *sock, const void *buf,
   size_t sent = 0;
 
   while (sent < len) {
-    ssize_t rv = send(sock->fd, (const char *)buf + sent, len - sent, flags);
+    ssize_t rv =
+        compat_socket_send(sock->fd, (const char *)buf + sent, len - sent, flags);
     if (rv < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      if (compat_socket_would_block()) {
         break;
       }
       return MQTT_ERROR_SOCKET_ERROR;
@@ -34,9 +33,9 @@ static ssize_t mqtt_pal_recvall_plain(cynk_mqtt_socket *sock, void *buf,
   void *start = buf;
 
   while (bufsz > 0) {
-    ssize_t rv = recv(sock->fd, buf, bufsz, flags);
+    ssize_t rv = compat_socket_recv(sock->fd, buf, bufsz, flags);
     if (rv < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      if (compat_socket_would_block()) {
         break;
       }
       return MQTT_ERROR_SOCKET_ERROR;

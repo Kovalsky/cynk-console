@@ -6,15 +6,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <time.h>
-#include <unistd.h>
+
+#include "compat.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
-
-#include <pthread.h>
 
 #include <mqtt.h>
 
@@ -40,7 +38,7 @@ struct cli_state {
   cynk_transport tx;
   cynk_device_config dev_cfg;
   cynk_mqtt_socket *sock;
-  pthread_t worker;
+  compat_thread_t worker;
   int worker_running;
   int worker_started;
   int connected;
@@ -53,7 +51,7 @@ struct cli_state {
 static void cli_disconnect(struct cli_state *state);
 
 struct cli_line_state {
-  pthread_mutex_t lock;
+  compat_mutex_t lock;
   int active;
   const char *prompt;
   char buf[2048];
@@ -62,7 +60,7 @@ struct cli_line_state {
 };
 
 static struct cli_line_state g_line = {
-    PTHREAD_MUTEX_INITIALIZER, 0, NULL, {0}, 0, 0};
+    COMPAT_MUTEX_INITIALIZER, 0, NULL, {0}, 0, 0};
 
 static void cli_redraw_line_locked(void);
 static void cli_async_begin(void);
@@ -76,7 +74,7 @@ static const char *cli_prompt(void) {
 static int cli_use_color(void) {
   const char *env = getenv("CYNK_CONSOLE_NO_COLOR");
 
-  if (!isatty(STDOUT_FILENO)) {
+  if (!compat_isatty(1)) {
     return 0;
   }
 
@@ -105,10 +103,10 @@ static const char *cli_reset(void) {
 }
 
 static void cli_print_prompt(void) {
-  pthread_mutex_lock(&g_line.lock);
+  compat_mutex_lock(&g_line.lock);
   printf("%s%s%s", cli_color(CYNK_CLR_CYAN), cli_prompt(), cli_reset());
   fflush(stdout);
-  pthread_mutex_unlock(&g_line.lock);
+  compat_mutex_unlock(&g_line.lock);
 }
 
 struct cli_history {
@@ -156,7 +154,7 @@ static char *cli_next_token(char **p) {
 
 static int cli_history_path(char *buf, size_t len) {
   const char *env = getenv("CYNK_CONSOLE_HISTORY");
-  const char *home = getenv("HOME");
+  const char *home = compat_home_dir();
   const char *base = env && env[0] ? env : home;
 
   if (!base || !*base) {
@@ -291,11 +289,11 @@ static void cli_redraw_line_locked(void) {
 
 static void cli_redraw_line(const char *prompt, const char *buf, size_t len,
                             size_t cursor) {
-  pthread_mutex_lock(&g_line.lock);
+  compat_mutex_lock(&g_line.lock);
   g_line.active = 1;
   cli_line_store_locked(prompt, buf, len, cursor);
   cli_redraw_line_locked();
-  pthread_mutex_unlock(&g_line.lock);
+  compat_mutex_unlock(&g_line.lock);
 }
 
 static void cli_print_suggestions(const char **items, size_t count) {
@@ -305,17 +303,17 @@ static void cli_print_suggestions(const char **items, size_t count) {
     return;
   }
 
-  pthread_mutex_lock(&g_line.lock);
+  compat_mutex_lock(&g_line.lock);
   fputs("\n", stdout);
   for (i = 0; i < count; i++) {
     printf("%s%s", items[i], (i + 1) % 4 == 0 || i + 1 == count ? "\n" : "\t");
   }
   fflush(stdout);
-  pthread_mutex_unlock(&g_line.lock);
+  compat_mutex_unlock(&g_line.lock);
 }
 
 static void cli_line_start(const char *prompt) {
-  pthread_mutex_lock(&g_line.lock);
+  compat_mutex_lock(&g_line.lock);
   g_line.active = 1;
   g_line.prompt = prompt;
   g_line.len = 0;
@@ -323,11 +321,11 @@ static void cli_line_start(const char *prompt) {
   g_line.buf[0] = '\0';
   fputs(prompt, stdout);
   fflush(stdout);
-  pthread_mutex_unlock(&g_line.lock);
+  compat_mutex_unlock(&g_line.lock);
 }
 
 static void cli_line_finish(int print_newline) {
-  pthread_mutex_lock(&g_line.lock);
+  compat_mutex_lock(&g_line.lock);
   if (print_newline) {
     fputs("\n", stdout);
   }
@@ -337,11 +335,11 @@ static void cli_line_finish(int print_newline) {
   g_line.cursor = 0;
   g_line.buf[0] = '\0';
   fflush(stdout);
-  pthread_mutex_unlock(&g_line.lock);
+  compat_mutex_unlock(&g_line.lock);
 }
 
 static void cli_async_begin(void) {
-  pthread_mutex_lock(&g_line.lock);
+  compat_mutex_lock(&g_line.lock);
   if (g_line.active) {
     fputs("\r\x1b[K", stdout);
   }
@@ -353,7 +351,7 @@ static void cli_async_end(void) {
   } else {
     fflush(stdout);
   }
-  pthread_mutex_unlock(&g_line.lock);
+  compat_mutex_unlock(&g_line.lock);
 }
 
 static void cli_tab_complete(char *buf, size_t buflen, size_t *len, size_t *cursor) {
@@ -462,9 +460,8 @@ static void cli_buffer_set(char *buf, size_t buflen, size_t *len,
 }
 
 static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
-  struct termios orig;
-  struct termios raw;
-  int use_tty = isatty(STDIN_FILENO);
+  compat_term_state term_state;
+  int use_tty = compat_isatty(0);
   size_t len = 0;
   size_t cursor = 0;
   size_t hist_index = hist->len;
@@ -479,16 +476,7 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
     return buf;
   }
 
-  if (tcgetattr(STDIN_FILENO, &orig) != 0) {
-    return NULL;
-  }
-  raw = orig;
-  raw.c_lflag &= (tcflag_t) ~(ICANON | ECHO);
-  raw.c_iflag &= (tcflag_t) ~(IXON | ICRNL);
-  raw.c_cc[VMIN] = 1;
-  raw.c_cc[VTIME] = 0;
-
-  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) {
+  if (compat_term_raw_enable(&term_state) != 0) {
     return NULL;
   }
 
@@ -496,10 +484,10 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
 
   for (;;) {
     unsigned char c;
-    ssize_t n = read(STDIN_FILENO, &c, 1);
+    int n = compat_read_char(&c);
 
     if (n <= 0) {
-      tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
+      compat_term_raw_disable(&term_state);
       free(saved);
       cli_line_finish(0);
       return NULL;
@@ -508,7 +496,7 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
     if (c == '\r' || c == '\n') {
       buf[len] = '\0';
       cli_line_finish(1);
-      tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
+      compat_term_raw_disable(&term_state);
       free(saved);
       return buf;
     }
@@ -521,14 +509,14 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
     if (c == 3) {
       buf[0] = '\0';
       cli_line_finish(1);
-      tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
+      compat_term_raw_disable(&term_state);
       free(saved);
       return buf;
     }
 
     if (c == 4) {
       if (len == 0) {
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig);
+        compat_term_raw_disable(&term_state);
         free(saved);
         cli_line_finish(0);
         return NULL;
@@ -561,10 +549,10 @@ static char *cli_readline(struct cli_history *hist, char *buf, size_t buflen) {
 
     if (c == 27) {
       unsigned char seq[2];
-      if (read(STDIN_FILENO, &seq[0], 1) != 1) {
+      if (compat_read_char(&seq[0]) != 1) {
         continue;
       }
-      if (read(STDIN_FILENO, &seq[1], 1) != 1) {
+      if (compat_read_char(&seq[1]) != 1) {
         continue;
       }
       if (seq[0] != '[') {
@@ -698,12 +686,8 @@ static const char *cynk_error_str(int rc) {
 }
 
 static uint64_t cli_now_ms(void *ctx) {
-  struct timespec ts;
-
   (void)ctx;
-
-  clock_gettime(CLOCK_REALTIME, &ts);
-  return (uint64_t)ts.tv_sec * 1000u + (uint64_t)(ts.tv_nsec / 1000000u);
+  return compat_now_ms();
 }
 
 static int cli_now_iso8601(void *ctx, char *buf, size_t cap) {
@@ -714,7 +698,7 @@ static int cli_now_iso8601(void *ctx, char *buf, size_t cap) {
   (void)ctx;
 
   now = time(NULL);
-  if (gmtime_r(&now, &tm) == NULL) {
+  if (compat_gmtime(&now, &tm) != 0) {
     return -1;
   }
 
@@ -908,7 +892,7 @@ static void *cli_mqtt_worker(void *arg) {
       cli_async_end();
       break;
     }
-    usleep(100000U);
+    compat_sleep_ms(100);
   }
 
   return NULL;
@@ -938,7 +922,7 @@ static int cli_wait_for_connack(struct cli_state *state) {
       return -1;
     }
 
-    usleep(100000U);
+    compat_sleep_ms(100);
   }
 }
 
@@ -952,7 +936,7 @@ static int cli_wait_for_handshake(struct cli_state *state) {
               cli_reset());
       return -1;
     }
-    usleep(100000U);
+    compat_sleep_ms(100);
   }
 
   return cynk_device_handshake_ready(state->device) ? 0 : -1;
@@ -1028,7 +1012,7 @@ static int cli_connect(struct cli_state *state) {
   }
 
   state->worker_running = 1;
-  if (pthread_create(&state->worker, NULL, cli_mqtt_worker, state) != 0) {
+  if (compat_thread_create(&state->worker, cli_mqtt_worker, state) != 0) {
     fprintf(stderr, "%sFailed to start MQTT worker.%s\n",
             cli_color(CYNK_CLR_RED), cli_reset());
     state->worker_running = 0;
@@ -1059,7 +1043,7 @@ static void cli_disconnect(struct cli_state *state) {
 
   if (state->worker_started) {
     state->worker_running = 0;
-    pthread_join(state->worker, NULL);
+    compat_thread_join(state->worker);
     state->worker_started = 0;
   }
 
@@ -1262,6 +1246,8 @@ int cli_run(const struct cli_config *cfg) {
   memset(&state, 0, sizeof(state));
   state.cfg = *cfg;
   state.profile = PROFILE_HYBRID;
+
+  compat_console_init();
 
   state.tx.publish = cli_publish;
   state.tx.subscribe = cli_subscribe;

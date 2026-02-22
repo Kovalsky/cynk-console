@@ -1,0 +1,96 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: cynk-console-linux-x86_64
+            binary: cynk-console
+          - os: macos-latest          # ARM64 (Apple Silicon)
+            artifact: cynk-console-macos-arm64
+            binary: cynk-console
+          - os: macos-13              # x86_64 (Intel)
+            artifact: cynk-console-macos-x86_64
+            binary: cynk-console
+          - os: windows-latest
+            artifact: cynk-console-windows-x86_64
+            binary: cynk-console.exe
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.artifact }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp build/${{ matrix.binary }} ${{ matrix.binary }}
+          chmod +x ${{ matrix.binary }}
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Copy-Item "build\Release\${{ matrix.binary }}" -Destination "${{ matrix.binary }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Rename binaries for release
+        run: |
+          mkdir -p release
+          cp artifacts/cynk-console-linux-x86_64/cynk-console \
+             release/cynk-console-linux-x86_64
+          cp artifacts/cynk-console-macos-arm64/cynk-console \
+             release/cynk-console-macos-arm64
+          cp artifacts/cynk-console-macos-x86_64/cynk-console \
+             release/cynk-console-macos-x86_64
+          cp artifacts/cynk-console-windows-x86_64/cynk-console.exe \
+             release/cynk-console-windows-x86_64.exe
+          chmod +x release/cynk-console-*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*
