@@ -1,7 +1,7 @@
-# Cynk Device CLI - Specification
+# Cynk Console - Specification
 
 ## Goals
-- Provide an interactive terminal emulator (`cynk-device`) for Cynk devices.
+- Provide an interactive terminal emulator (`cynk-console`) for Cynk devices.
 - Reuse the C SDK protocol: status handshake, telemetry with widget refs, command handling.
 - Offer sensor/controller/hybrid profiles as shortcuts without restricting custom flows.
 - Ship as a single C binary built with CMake + MQTT-C + mbedTLS.

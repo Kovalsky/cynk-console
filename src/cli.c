@@ -70,11 +70,11 @@ static void cli_async_end(void);
 static void cli_line_finish(int print_newline);
 
 static const char *cli_prompt(void) {
-  return "cynk-device> ";
+  return "cynk-console> ";
 }
 
 static int cli_use_color(void) {
-  const char *env = getenv("CYNK_DEVICE_NO_COLOR");
+  const char *env = getenv("CYNK_CONSOLE_NO_COLOR");
 
   if (!isatty(STDOUT_FILENO)) {
     return 0;
@@ -155,7 +155,7 @@ static char *cli_next_token(char **p) {
 }
 
 static int cli_history_path(char *buf, size_t len) {
-  const char *env = getenv("CYNK_DEVICE_HISTORY");
+  const char *env = getenv("CYNK_CONSOLE_HISTORY");
   const char *home = getenv("HOME");
   const char *base = env && env[0] ? env : home;
 
@@ -170,7 +170,7 @@ static int cli_history_path(char *buf, size_t len) {
     return 0;
   }
 
-  if (snprintf(buf, len, "%s/.cynk-device_history", base) >= (int)len) {
+  if (snprintf(buf, len, "%s/.cynk-console_history", base) >= (int)len) {
     return -1;
   }
 
@@ -1282,7 +1282,7 @@ int cli_run(const struct cli_config *cfg) {
   cynk_device_set_command_cb(state.device, cli_on_command, &state);
   cynk_device_set_handshake_cb(state.device, cli_on_handshake, &state);
 
-  puts("cynk-device shell ready. type 'help' for commands.");
+  puts("cynk-console shell ready. type 'help' for commands.");
   cli_history_init(&history);
 
   while (cli_readline(&history, line, sizeof(line))) {

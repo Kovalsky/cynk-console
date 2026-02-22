@@ -11,11 +11,11 @@ password=$2
 slug=${3:-slider_1}
 value=${4:-42}
 
-broker=${BROKER:-127.0.0.1}
-port=${PORT:-1883}
+broker=${BROKER:-staging.cynk.tech}
+port=${PORT:-8883}
 handshake_timeout=${HANDSHAKE_TIMEOUT:-10000}
-tls=${TLS:-0}
-tls_ca=${TLS_CA:-}
+tls=${TLS:-1}
+tls_ca=${TLS_CA:-/etc/ssl/certs/ca-certificates.crt}
 tls_insecure=${TLS_INSECURE:-0}
 
 args=(
@@ -39,4 +39,4 @@ else
   args+=(--no-tls)
 fi
 
-printf "connect\nsend slug=%s %s\nquit\n" "$slug" "$value" | ./build/cynk-device "${args[@]}"
+printf "connect\nsend slug=%s %s\nquit\n" "$slug" "$value" | ./build/cynk-console "${args[@]}"

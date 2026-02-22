@@ -8,10 +8,10 @@ static void print_usage(const char *prog) {
   printf("Usage: %s --device-id <id> --password <password> [options]\n", prog);
   puts("");
   puts("Options:");
-  puts("  --broker <host>            MQTT broker host (default: localhost)");
+  puts("  --broker <host>            MQTT broker host (default: staging.cynk.tech)");
   puts("  --port <port>              MQTT broker port (default: 8883 for TLS, 1883 for no TLS)");
   puts("  --no-tls                   disable TLS");
-  puts("  --tls-ca <path>            CA cert path for TLS (default: certs/dev_ca.crt)");
+  puts("  --tls-ca <path>            CA cert path for TLS (default: /etc/ssl/certs/ca-certificates.crt)");
   puts("  --tls-insecure             skip TLS verification");
   puts("  --qos <0|1|2>              publish QoS (default: 1)");
   puts("  --keepalive <seconds>      MQTT keepalive (default: 30)");
@@ -35,12 +35,12 @@ int main(int argc, char **argv) {
   int i;
 
   memset(&cfg, 0, sizeof(cfg));
-  cfg.broker = "localhost";
+  cfg.broker = "staging.cynk.tech";
   cfg.qos = 1;
   cfg.keepalive = 30;
   cfg.handshake_timeout_ms = 10000;
   cfg.tls = 1;
-  cfg.tls_ca = "certs/dev_ca.crt";
+  cfg.tls_ca = "/etc/ssl/certs/ca-certificates.crt";
 
   for (i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--device-id") == 0 && i + 1 < argc) {

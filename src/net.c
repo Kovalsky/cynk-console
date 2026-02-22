@@ -53,7 +53,7 @@ int cynk_net_connect(cynk_mqtt_socket **out, const cynk_net_config *cfg,
   mbedtls_net_init(&sock->net);
 
   if (cfg->use_tls) {
-    const char *pers = "cynk-device";
+    const char *pers = "cynk-console";
 
     init_tls(sock);
 

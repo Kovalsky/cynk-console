@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cynk_device_cli LANGUAGES C)
+project(cynk_console LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -47,18 +47,18 @@ target_link_libraries(mqttc
     mbedcrypto
 )
 
-add_executable(cynk-device
+add_executable(cynk-console
   src/main.c
   src/cli.c
   src/net.c
 )
 
-target_include_directories(cynk-device
+target_include_directories(cynk-console
   PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-target_link_libraries(cynk-device
+target_link_libraries(cynk-console
   PRIVATE
     cynk_device
     mqttc
@@ -69,4 +69,4 @@ target_link_libraries(cynk-device
 
 find_package(Threads REQUIRED)
 
-target_link_libraries(cynk-device PRIVATE Threads::Threads)
+target_link_libraries(cynk-console PRIVATE Threads::Threads)
