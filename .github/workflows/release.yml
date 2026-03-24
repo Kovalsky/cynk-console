@@ -82,9 +82,11 @@ jobs:
 
       - name: Build NSIS installer (Windows)
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: cmd
         run: |
-          Copy-Item "${{ matrix.binary }}" -Destination "installer\cynk-console.exe"
-          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DVERSION=${{ github.ref_name }} installer\cynk-console.nsi
+          choco install nsis -y
+          copy "${{ matrix.binary }}" "installer\cynk-console.exe"
+          "%ProgramFiles(x86)%\NSIS\makensis.exe" /DVERSION=${{ github.ref_name }} installer\cynk-console.nsi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
