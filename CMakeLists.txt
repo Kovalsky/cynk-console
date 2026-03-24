@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(cynk_console LANGUAGES C)
+project(cynk_console VERSION 0.2.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -64,6 +64,11 @@ add_executable(cynk-console
 target_include_directories(cynk-console
   PRIVATE
     ${CMAKE_SOURCE_DIR}/src
+)
+
+target_compile_definitions(cynk-console
+  PRIVATE
+    CYNK_CONSOLE_VERSION="${PROJECT_VERSION}"
 )
 
 target_link_libraries(cynk-console

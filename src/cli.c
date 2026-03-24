@@ -1268,6 +1268,17 @@ int cli_run(const struct cli_config *cfg) {
   cynk_device_set_command_cb(state.device, cli_on_command, &state);
   cynk_device_set_handshake_cb(state.device, cli_on_handshake, &state);
 
+  if (cfg->tls) {
+    if (cfg->tls_insecure)
+      printf("TLS: %s:%d (insecure, no CA verification)\n", cfg->broker, cfg->port);
+    else if (cfg->tls_ca)
+      printf("TLS: %s:%d (CA: %s)\n", cfg->broker, cfg->port, cfg->tls_ca);
+    else
+      printf("TLS: %s:%d (warning: no CA certificate found)\n", cfg->broker, cfg->port);
+  } else {
+    printf("Connecting: %s:%d (no TLS)\n", cfg->broker, cfg->port);
+  }
+
   puts("cynk-console shell ready. type 'help' for commands.");
   cli_history_init(&history);
 

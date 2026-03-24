@@ -18,6 +18,7 @@ static void print_usage(const char *prog) {
   puts("  --qos <0|1|2>              publish QoS (default: 1)");
   puts("  --keepalive <seconds>      MQTT keepalive (default: 30)");
   puts("  --handshake-timeout <ms>   handshake timeout (default: 10000)");
+  puts("  --version                  show version and exit");
   puts("  --help                     show this help");
 }
 
@@ -77,6 +78,9 @@ int main(int argc, char **argv) {
       cfg.tls_insecure = 1;
     } else if (strcmp(argv[i], "--no-tls") == 0) {
       cfg.tls = 0;
+    } else if (strcmp(argv[i], "--version") == 0) {
+      printf("cynk-console %s\n", CYNK_CONSOLE_VERSION);
+      return 0;
     } else if (strcmp(argv[i], "--help") == 0) {
       print_usage(argv[0]);
       return 0;

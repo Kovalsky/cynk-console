@@ -17,6 +17,11 @@ jobs:
             artifact: cynk-console-linux-x86_64
             binary: cynk-console
             cmake_flags: ""
+          - os: ubuntu-latest
+            artifact: cynk-console-linux-aarch64
+            binary: cynk-console
+            cmake_flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake"
+            cross_arch: aarch64
           - os: macos-latest          # ARM64 (Apple Silicon)
             artifact: cynk-console-macos-arm64
             binary: cynk-console
@@ -39,6 +44,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install cross-compiler (Linux aarch64)
+        if: matrix.cross_arch == 'aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Configure (Unix)
         if: runner.os != 'Windows'
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_flags }}
@@ -49,6 +60,14 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release
+
+      - name: Smoke test
+        if: matrix.cross_arch == '' && runner.os != 'Windows'
+        run: ./build/${{ matrix.binary }} --version
+
+      - name: Smoke test (Windows)
+        if: matrix.cross_arch == '' && runner.os == 'Windows'
+        run: build\Release\${{ matrix.binary }} --version
 
       - name: Prepare artifact (Unix)
         if: runner.os != 'Windows'
@@ -61,11 +80,25 @@ jobs:
         run: |
           Copy-Item "build\Release\${{ matrix.binary }}" -Destination "${{ matrix.binary }}"
 
+      - name: Build NSIS installer (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          Copy-Item "${{ matrix.binary }}" -Destination "installer\cynk-console.exe"
+          makensis /DVERSION=${{ github.ref_name }} installer\cynk-console.nsi
+        shell: cmd
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.binary }}
+
+      - name: Upload installer artifact
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: cynk-console-setup-x86_64
+          path: installer/cynk-console-setup-x86_64.exe
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -85,13 +118,22 @@ jobs:
           mkdir -p release
           cp artifacts/cynk-console-linux-x86_64/cynk-console \
              release/cynk-console-linux-x86_64
+          cp artifacts/cynk-console-linux-aarch64/cynk-console \
+             release/cynk-console-linux-aarch64
           cp artifacts/cynk-console-macos-arm64/cynk-console \
              release/cynk-console-macos-arm64
           cp artifacts/cynk-console-macos-x86_64/cynk-console \
              release/cynk-console-macos-x86_64
           cp artifacts/cynk-console-windows-x86_64/cynk-console.exe \
              release/cynk-console-windows-x86_64.exe
+          cp artifacts/cynk-console-setup-x86_64/cynk-console-setup-x86_64.exe \
+             release/cynk-console-setup-x86_64.exe
           chmod +x release/cynk-console-*
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

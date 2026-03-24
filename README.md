@@ -2,10 +2,38 @@
 
 Interactive terminal emulator for Cynk devices. This CLI reuses the C SDK to run the status handshake, publish telemetry, and print incoming commands.
 
-## Build
+## Install
+
+### macOS (Homebrew)
 
 ```bash
-cmake -S . -B build -DCYNK_DEVICE_SDK_DIR=../cynk-sdk-c
+brew install cynk/cynk/cynk-console
+```
+
+### Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kovalsky/cynk-console/master/scripts/install.sh | sh
+```
+
+Or specify a version:
+
+```bash
+CYNK_VERSION=v0.2.0 curl -fsSL https://raw.githubusercontent.com/Kovalsky/cynk-console/master/scripts/install.sh | sh
+```
+
+### Windows
+
+Download `cynk-console-setup-x86_64.exe` from the [latest release](https://github.com/Kovalsky/cynk-console/releases/latest) and run the installer.
+
+Or download `cynk-console-windows-x86_64.exe` directly and add it to your PATH.
+
+### From Source
+
+```bash
+git clone --recursive https://github.com/Kovalsky/cynk-console.git
+cd cynk-console
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
@@ -14,21 +42,19 @@ cmake --build build
 TLS is on by default (port 8883). Connects to `staging.cynk.tech` using the system CA bundle.
 
 ```bash
-./build/cynk-console \
-  --device-id <device_id> \
-  --password <device_password>
+cynk-console --device-id <device_id> --password <device_password>
 ```
 
 Local dev (plain TCP):
 
 ```bash
-./build/cynk-console --device-id <device_id> --password <device_password> --broker localhost --no-tls --port 1883
+cynk-console --device-id <device_id> --password <device_password> --broker localhost --no-tls --port 1883
 ```
 
 Local dev (TLS with dev CA):
 
 ```bash
-./build/cynk-console --device-id <device_id> --password <device_password> --broker localhost --tls-ca certs/dev_ca.crt
+cynk-console --device-id <device_id> --password <device_password> --broker localhost --tls-ca certs/dev_ca.crt
 ```
 
 ## Shell Commands
@@ -54,7 +80,7 @@ send slug=chart_2 23
 
 ```bash
 printf "connect\nsend <slug> 42\nquit\n" | \
-  ./build/cynk-console --device-id <device_id> --password <device_password>
+  cynk-console --device-id <device_id> --password <device_password>
 ```
 
 ## Demo Script
@@ -76,6 +102,7 @@ printf "connect\nsend <slug> 42\nquit\n" | \
 
 ## Troubleshooting
 
-- Handshake timeout: ensure the backend consumer is running and subscribed to `cynk/v1/status/+`.
-- TLS CA missing: for the dev broker, regenerate `priv/dev_tls/ca.crt` with `./scripts/gen_dev_mqtt_certs.sh` in the main Cynk repo, or use `--tls-insecure` for local tests.
-- TLS CA path errors: on macOS, the system CA bundle is at a different path. Use `--tls-ca /path/to/ca-bundle.crt` or `--tls-insecure`.
+- **Handshake timeout**: ensure the backend consumer is running and subscribed to `cynk/v1/status/+`.
+- **TLS CA missing**: for the dev broker, regenerate `priv/dev_tls/ca.crt` with `./scripts/gen_dev_mqtt_certs.sh` in the main Cynk repo, or use `--tls-insecure` for local tests.
+- **TLS CA not auto-detected**: the tool probes standard system paths (`/etc/ssl/cert.pem`, `/etc/ssl/certs/ca-certificates.crt`, etc.). If none match, use `--tls-ca /path/to/ca-bundle.crt` or `--tls-insecure` for testing.
+- **macOS Gatekeeper blocks the binary**: run `xattr -d com.apple.quarantine $(which cynk-console)` to remove the quarantine attribute.
