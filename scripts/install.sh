@@ -117,10 +117,14 @@ main() {
 
   chmod +x "${tmpdir}/cynk-console"
 
-  if [ -w "$INSTALL_DIR" ]; then
+  if [ -w "$INSTALL_DIR" ] 2>/dev/null; then
+    cp "${tmpdir}/cynk-console" "${INSTALL_DIR}/cynk-console"
+  elif [ -w "$(dirname "$INSTALL_DIR")" ] 2>/dev/null; then
+    mkdir -p "$INSTALL_DIR"
     cp "${tmpdir}/cynk-console" "${INSTALL_DIR}/cynk-console"
   else
     info "Installing to ${INSTALL_DIR} (requires sudo)..."
+    sudo mkdir -p "$INSTALL_DIR"
     sudo cp "${tmpdir}/cynk-console" "${INSTALL_DIR}/cynk-console"
   fi
 
