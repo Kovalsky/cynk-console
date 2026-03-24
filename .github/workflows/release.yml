@@ -84,8 +84,7 @@ jobs:
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         run: |
           Copy-Item "${{ matrix.binary }}" -Destination "installer\cynk-console.exe"
-          makensis /DVERSION=${{ github.ref_name }} installer\cynk-console.nsi
-        shell: cmd
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DVERSION=${{ github.ref_name }} installer\cynk-console.nsi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
