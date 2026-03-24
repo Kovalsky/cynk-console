@@ -7,7 +7,7 @@ Interactive terminal emulator for Cynk devices. This CLI reuses the C SDK to run
 ### macOS (Homebrew)
 
 ```bash
-brew install cynk/cynk/cynk-console
+brew install Kovalsky/tools/cynk-console
 ```
 
 ### Linux
